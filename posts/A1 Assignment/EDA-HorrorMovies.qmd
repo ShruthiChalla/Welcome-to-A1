@@ -1,0 +1,382 @@
+---
+title: "EDA-HorrorMovies"
+author: "Shruthi Challa"
+editor: visual
+---
+
+[**How did the Experiment take place?**]{.underline}
+
+A continuous experiment where a certain number of horror movies were selected and random horror movie watchers' heart rates from examined throughout the time they watched the movie.
+
+[**What would make this dataset better?**]{.underline}
+
+If the experiment also documented factors like ages, genders, time frames of the films and so on.
+
+[**Overall Summary**]{.underline}
+
+The Horror Movie data, which majorly explores quantitative data, is suprising in many ways. We have seen how higher/lower scare scores don't really reflect through rotten tomato's reviews and vice versa. How the different measured forms of heart rates can act as dependant variables, how scare scores are significantly higher for movies without sequels. We also went onto explore what might be the scariest movie alive! Interesting huh, go on read more...
+
+[**Set Up**]{.underline}
+
+```{r}
+#Setup
+library(tidyverse)
+library(mosaic) # Our all-in-one package
+library(skimr) # Looking at data
+library(visdat) # Mapping missing data
+library(naniar) # Missing data visualization and munging
+library(janitor) # Clean the data
+library(tinytable) # Printing Tables for our data
+library(ggformula)
+library(ggridges)
+##library(GGally)
+library(corrplot)
+library(corrgram)
+```
+
+[**Read Data & Examine Data**]{.underline}
+
+```{r}
+#Reading & Inspecting Horror Movies Dataset
+horrormovies <- readr::read_csv("../data/HorrorMoviedata.csv")
+horrormovies <- readr::read_delim("../data/HorrorMoviedata.csv", delim = ",")
+base::names(horrormovies)
+dplyr::glimpse(horrormovies)
+base::dim(horrormovies)
+utils::str(horrormovies)
+horrormovies
+```
+
+[**Clean Data**]{.underline}
+
+```{r}
+horrormovies_modified <- horrormovies %>%
+  janitor::clean_names(case = "snake") # clean names
+
+horrormovies_modified
+```
+
+[**Visualize for Missing Data (No missing data found)**]{.underline}
+
+```{r}
+visdat::vis_dat(horrormovies_modified)
+```
+
+[**Data Munging**]{.underline}
+
+```{r}
+horrormovies_modified2 <- horrormovies_modified %>%
+  mutate(
+    this_film_is_a_sequel = as.factor(this_film_is_a_sequel),
+    this_film_has_at_least_one_sequel = as.factor(this_film_has_at_least_one_sequel),
+  ) %>%
+  ##rename("dish" = item) %>% # rename item to dish
+
+  # arrange the Qual variables first, Quant next
+  dplyr::relocate(where(is.factor), .after = ranking)
+
+horrormovies_modified2
+```
+
+[**Data Dictionary**]{.underline}
+
+| Variable | Class | Description |
+|----|----|----|
+| Ranking | double | The overall ranking given to that movie amongst all the movies in the list |
+| This film is a sequel | factor | Specifies whether this film is a sequel or not |
+| This film has atleast 1 sequel | factor | Specifies whether this film has atleast 1 sequel |
+| Movie | character | Movie name |
+| Avg Resting bpm | double | Average resting bpm of movie watchers recorded before the start of the movie |
+| Avg Movie bpm | double | Average bpm of movie watchers while watching the movie |
+| Overall Difference | double | Difference seen between Avg resting bpm and Avg movie bpm |
+| HRV Difference % | double | The fluctuation in the time interval between heartbeats as a percentage |
+| Highest Spiked bpm | double | Highest bpm of movie watchers recorded during the movie |
+| Scare Score | double | How scary was the movie, given by movie watchers |
+| Rotten Tomato Score | double | Published rating score given by Rotten Tomatoes |
+| Year | double | Year of Movie release |
+
+[**Tiny Table**]{.underline}
+
+```{r}
+horrormovies_modified2 %>%
+  head(10) %>%
+  tinytable::tt(caption = "Horror Movie Data (Clean)") %>%
+  tinytable::theme_html(class = "table table-hover table-striped table-condensed") %>%
+  style_tt(fontsize = 0.8) %>%
+  stats::setNames(c("Rankings", "This Film is a Sequel", "Atleast 1 Sequel", "Movie", "Avg Resting BPM", "Avg Movie BPM", "Overall Diff", "HRV Diff%", "Highest Spiked BPM", "Scare Score", "Rotten Tomato Score", "Year"))
+```
+
+[**Summaries**]{.underline}
+
+This film is a sequel \>\> This film has atleast 1 sequel ratios
+
+```{r}
+horrormovies_modified2 %>% 
+dplyr::count(this_film_is_a_sequel, this_film_has_at_least_one_sequel) %>%
+tt()
+```
+
+Number of films released each year
+
+```{r}
+## Counting by the obvious factor variables
+horrormovies_modified2 %>%
+  dplyr::count(year) %>%
+  tt()
+```
+
+Summary for Average Heart Rate bpm recorded during the Movie
+
+```{r}
+# Single Variable, Multiple Summaries
+horrormovies_modified2 %>%
+  dplyr::summarise(
+    mean_movie_bpm = mean(avg_movie_heart_rate_bpm, na.rm = T),
+    sd_movie_bpm = sd(avg_movie_heart_rate_bpm, na.rm = T),
+    min_movie_bpm = min(avg_movie_heart_rate_bpm, na.rm = T),
+    max_movie_bpm = max(avg_movie_heart_rate_bpm, na.rm = T)
+  )
+```
+
+Summary comparison of Avg movie heart rate bpm and Highest spiked heart rate bpm
+
+```{r}
+# Multiple Variables, Multiple Summaries
+horrormovies_modified2 %>%
+  dplyr::summarise(across(
+    .cols = c(avg_movie_heart_rate_bpm, highest_spike_bpm), # select columns
+
+    .fns = list(
+      mean = ~ mean(., na.rm = T),
+      sd = sd,
+      min = min, 
+      max = max
+    )
+  ))
+
+
+```
+
+[**PLOT 1**]{.underline} [**Number of Horror Movies released over the years**]{.underline}
+
+```{r}
+horrormovies_modified2 %>% 
+  gf_bar(~year) %>% 
+    gf_labs(
+    title = "Plot 1",
+    subtitle = "Number of horror movies released has increased over the years",
+    x = "Year", y = "Number of Movies Released"
+  )
+ gf_refine(scale_fill_brewer(palette = "Set1"))
+```
+
+[**What did I find Suprising?**]{.underline}
+
+Not much is suprising here, it's natural to see a higher number of horror movies being released over the years as people gain access to newer technologies, however it is interesting to see gaps within this graph especially between 1985 and 1995 when not a single Horror movie had been released, an entire Decade with no movie! What traumatized people back then to not make a single horror movie for an entire decade I wonder?
+
+[**PLOT 2A**]{.underline} [**Hypothesis: Do higher scare scores mean higher rotten tomato scores?**]{.underline}
+
+```{r}
+horrormovies_modified2 %>%
+  gf_line(rotten_tomato_score ~ scare_score) %>%
+  gf_labs(title = "Plot 2A", 
+          subtitle = "There is no relation between the scare score and the rotten tomato ratings"
+          ) %>%
+  gf_theme(theme(axis.text.x = element_text(
+    size = 6,
+    angle = 45, hjust = 0.5
+  ))) %>%
+ gf_refine(scale_fill_brewer(palette = "Set1"))
+```
+
+[**PLOT 2B**]{.underline} [**Hypothesis: Do higher scare scores mean higher rotten tomato scores?**]{.underline}
+
+```{r}
+horrormovies_modified2 %>%
+  tidyr::drop_na() %>%
+  gf_point(rotten_tomato_score ~ scare_score,
+    colour = ~this_film_is_a_sequel,
+  ) %>%
+gf_labs(title = "Plot 2B", 
+          subtitle = "There is no relation between the scare score and the rotten tomato ratings + movies with the highest rotten tomato score were not sequals"
+          ) %>%
+  gf_theme(theme(axis.text.x = element_text(
+    size = 6,
+    angle = 45, hjust = 0.5
+  ))) %>%
+ gf_refine(scale_fill_brewer(palette = "Set1"))
+```
+
+[**What did I find Suprising?**]{.underline}
+
+It's interesting to find that the Scare scores do not corelate with the Rotten Tomato Scores thus proving the hypothesis wrong!
+
+[**PLOT 3**]{.underline} [**Distribution of Avg Movie heart rate bpm across film types**]{.underline}
+
+```{r}
+#Ask Arvind about gf_theme
+horrormovies_modified2 %>%
+  gf_point(movie~avg_movie_heart_rate_bpm,
+    colour = ~this_film_is_a_sequel,
+    ##shape = ~this_film_has_at_least_one_sequel,
+    size = 2, data = .
+  ) %>%
+  gf_labs(
+    title = "Plot 3",
+    x = "Avg Heart BPM",
+    y = "Movie Name"
+    ) %>%
+  # Use same name for scales to merge legends
+  gf_refine(
+    scale_color_brewer(
+      name = "Legend = Is it a Sequel?",
+      palette = "Set1"
+    ),
+    scale_shape_manual(
+      name = "Legend = It has a Sequel?",
+      values = c(15:21)
+    )
+  )
+```
+
+[**What did I find Suprising?**]{.underline}
+
+Stand alone horror films have either higher or lower avg heart rate bpm while the movies which are sequels' avg movie heart rate bpm fall into one section. This could be because movie watchers who have watched the orginal know what to expect from the franchaise.
+
+[**PLOT 4**]{.underline} [**What is the best Horror Movie based on Highest Heart bpm, Rotten Tomato Score, and Scare Score?**]{.underline}
+
+Understanding which films have the highest Rotten Tomato Scores
+
+```{r}
+horrormovies_modified2 %>%
+  count(rotten_tomato_score) %>%
+  arrange(desc(rotten_tomato_score)) %>%
+  top_n(3, n)
+```
+
+```{r}
+horrormovies_modified2 %>%     filter(rotten_tomato_score=="95") %>% 
+gf_point(movie ~ rotten_tomato_score,
+    colour = ~this_film_is_a_sequel,
+    shape = ~this_film_has_at_least_one_sequel,
+    size = 4
+  ) %>% 
+gf_labs(
+    title = "Plot 4A",
+    x = "Rotten Tomato Score",
+    y = "Movie Name"
+    )
+```
+
+Understanding which films have the highest Scare Scores?
+
+```{r}
+horrormovies_modified2 %>%
+  count(scare_score) %>%
+  arrange(desc(scare_score)) %>%
+  top_n(3, n)
+```
+
+```{r}
+horrormovies_modified2 %>%     filter(scare_score=="74") %>% 
+gf_point(movie ~ scare_score,
+    colour = ~this_film_is_a_sequel,
+    shape = ~this_film_has_at_least_one_sequel,
+    size = 4
+  ) %>% 
+  gf_labs(
+    title = "Plot 4B",
+    x = "Rotten Tomato Score",
+    y = "Movie Name"
+    )
+```
+
+Understanding which Horror Movies give off the highest spiked Heart Rates
+
+```{r}
+horrormovies_modified2 %>%
+  count(highest_spike_bpm) %>%
+  arrange(desc(highest_spike_bpm)) %>%
+  top_n(3, n)
+```
+
+```{r}
+horrormovies_modified2 %>%     filter(highest_spike_bpm =="114"| highest_spike_bpm == "103" | highest_spike_bpm == "96") %>% 
+gf_point(movie ~ highest_spike_bpm,
+    colour = ~this_film_is_a_sequel,
+    shape = ~this_film_has_at_least_one_sequel,
+    size = 4
+  ) %>% 
+  gf_labs(
+    title = "Plot 4C",
+    x = "Rotten Tomato Score",
+    y = "Movie Name"
+    )
+```
+
+[**What did I find Suprising?**]{.underline}
+
+"It Follows" shall be the horror Movie that I shall never watch, however it's suprising to see that despite it's scare score and high rotten tomato review, it didn't generate the highest spiked heart rate during the duration of the film. So Is it really the scariest?
+
+[**Experimental Graphs**]{.underline}
+
+```{r}
+horrormovies_modified2 %>%
+  gf_bar(~avg_movie_heart_rate_bpm,
+         fill = ~this_film_has_at_least_one_sequel,
+         position = "stack"
+  ) %>%
+  gf_labs(
+    title = "Plot 4A",
+    x = "Avg Heart BPM",
+    y = "Number of Horror Movies"
+    ) %>%
+  # Use same name for scales to merge legends
+  gf_refine(
+    scale_color_brewer(
+      name = "This Film has atleast 1 sequel",
+      palette = "Set1"
+    )
+  )
+```
+
+```{r}
+horrormovies_modified2 %>%
+  gf_bar(~highest_spike_bpm,
+         fill = ~this_film_is_a_sequel,
+         position = "stack"
+  ) %>%
+gf_labs(
+    title = "Plot 4B",
+    x = "Highest spiked Heart Rate bpm",
+    y = "Number of Horror Movies"
+    ) %>%
+  # Use same name for scales to merge legends
+  gf_refine(
+    scale_color_brewer(
+      name = "This Film has atleast 1 sequel",
+      palette = "Set1"
+    )
+  )
+```
+
+```{r}
+##Scare Scores are significantly higher for films without sequels than those with sequels
+horrormovies_modified2 %>% 
+  gf_histogram(scare_score~movie,
+           fill = ~this_film_has_at_least_one_sequel,
+         bins = 20, orientation = "y"
+  ) %>% 
+gf_labs(
+    title = "Plot 5",
+    x = "Highest spiked Heart Rate bpm",
+    y = "Number of Horror Movies"
+    ) %>%
+  # Use same name for scales to merge legends
+  gf_refine(
+    scale_color_brewer(
+      name = "This Film has atleast 1 sequel",
+      palette = "Set1"
+    )
+  )
+```

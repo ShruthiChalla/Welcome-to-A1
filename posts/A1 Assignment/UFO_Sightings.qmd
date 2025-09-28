@@ -1,0 +1,276 @@
+---
+title: "UFO Sightings"
+listing:
+  contents: posts
+  sort: "date desc"
+  type: default
+  categories: true
+  sort-ui: false
+  filter-ui: false
+page-layout: full
+title-block-banner: true
+---
+
+[**Set Up**]{.underline}
+
+```{r}
+#| label: setup
+#| echo: false
+library(tidyverse)
+library(mosaic) # Our all-in-one package
+library(skimr) # Looking at data
+library(visdat) # Mapping missing data
+library(naniar) # Missing data visualization and munging
+library(janitor) # Clean the data
+library(tinytable) # Printing Tables for our data
+library(crosstable)
+library(ggformula)
+library(DT)
+```
+
+[**Read Data**]{.underline}
+
+```{r}
+ufo_sightings <- readr::read_csv("../data/ufo_sightings.csv") %>% janitor::clean_names(case ="snake")
+```
+
+[**Examine Data**]{.underline}
+
+```{r}
+base::names(ufo_sightings)
+dplyr::glimpse(ufo_sightings)
+base::dim(ufo_sightings)
+utils::str(ufo_sightings)
+```
+
+[**Show and Remove Missing Data**]{.underline}
+
+```{r show missing data}
+visdat::vis_dat(ufo_sightings)
+visdat::vis_miss(ufo_sightings)
+```
+
+```{r Remove missing data}
+ufo_sightings_modified <- ufo_sightings %>%tidyr::drop_na()
+ufo_sightings_modified
+```
+
+[**Remove Redundant Column**]{.underline}
+
+```{r Remove columns}
+#Remove the described encounter length column because it has been convertd into time in another column.
+ufo_sightings_modified2 <- ufo_sightings_modified %>% 
+  dplyr::select(-c(described_encounter_length))
+ufo_sightings_modified2
+```
+
+[**Data Munging**]{.underline}
+
+```{r}
+#Seperating date and time from date_time column
+ufo_sightings_modified3 <- ufo_sightings_modified2 %>% separate(date_time, c('date', 'time'), " ")
+ufo_sightings_modified3
+```
+
+```{r}
+#Seperating month, day and year from the date column
+ufo_sightings_modified4 <- ufo_sightings_modified3 %>% tidyr::separate(date, c("month", "day", "year"), "/")
+ufo_sightings_modified4
+```
+
+```{r}
+#Mutate into appropriate data types and rename the factors in month column
+ufo_sightings_modified5 <- ufo_sightings_modified4 %>%
+  mutate(
+    state = as.factor(state),
+    country = as.factor(country),
+    ufo_shape = as.factor(ufo_shape),
+    month = factor(month,
+                   levels = 1:12,  
+                   labels = c("Jan","Feb","Mar","Apr","May","Jun",
+                              "Jul","Aug","Sep","Oct","Nov","Dec")),
+    day = as.double(day),
+    year = as.double(year)
+  )
+  
+
+ufo_sightings_modified5
+```
+
+[**Data Dictionary**]{.underline}
+
+| Variable | Class | Description |
+|----|----|----|
+| month | factor | The month in which the UFO sighting occurred |
+| day | double | day of the month in which the UFO sighting occurred |
+| year | double | year in which the UFO sighting occurred |
+| time | character | time of day in which the sighting occurred |
+| city area | character | city or area of sighting |
+| state | factor | state/region of sighting |
+| country | factor | country of sighting |
+| ufo_shape | factor | UFO Shape |
+| encounter_length | dbl | Encounter length in seconds |
+| description | character | Description of encounter |
+| date_documented | character | Date documented |
+| latitude | double | Latitude |
+| longitude | double | Longitude |
+
+: Data Dictionary: ufo_sightings_modified5
+
+[**Tiny Table**]{.underline}
+
+```{r}
+ufo_sightings_modified5 %>%
+  head(10) %>%
+  tinytable::tt(caption = "UFO Sightings") %>%
+  tinytable::theme_html(class = "table table-hover table-striped table-condensed") %>%
+  style_tt(fontsize = 0.8) %>%
+  stats::setNames(c("Month", "Day","Year","Time","City Area","State","Country","UFO Shape","Encounter Length","Description","Date Documented", "Latitude","Longitude"))
+```
+
+```{r}
+glimpse(ufo_sightings_modified5)
+```
+
+How many UFO shapes are there?
+
+```{r}
+#Counting ufo shapes
+ufo_sightings_modified5 %>%
+  dplyr::count(ufo_shape) %>%
+  tt()
+```
+
+What is the number of UFO shapes counted by year?
+
+```{r}
+ufo_sightings_modified5 %>%
+  dplyr::count(across(.cols = c(ufo_shape, year))) %>%
+  tt()
+```
+
+What is the number of UFO shapes counted by country?
+
+```{r}
+ufo_sightings_modified3 %>%
+  dplyr::count(across(.cols = c(country, ufo_shape))) %>%
+  tt()#count of ufo shapes across countries
+```
+
+What is the mean, median, maximum and minimum of encounter lengths?
+
+```{r}
+# Summary of encounter length
+ufo_sightings_modified5 %>%
+  dplyr::summarise(
+    mean_encounter_lenth = mean(encounter_length, na.rm = T),
+    median_encounter_lenth = median(encounter_length, na.rm = T),
+    min_encounter_length = min(encounter_length, na.rm = T),
+    max_encounter_lenth = max(encounter_length, na.rm = T)
+  )
+```
+
+The mean(6572.997 seconds) is far off from median(180 seconds), which likely means the values vary by a lot. This is evident by the huge difference from minimum encounter length (0.01 seconds) and maximum encounter length(82800000).
+
+What is the summary of encounter length for each country?
+
+```{r}
+# Mean encounter length by country
+ufo_sightings_modified5 %>%
+  group_by(country) %>%
+  summarize(average_encounter_length = mean(encounter_length), median_encounter_length = median(encounter_length),
+            max_encounter_length = max(encounter_length),
+            min_encounter_length = min(encounter_length),
+            count = n())
+```
+
+What are the most to least sighted UFO shapes?
+
+```{r}
+gf_bar(~ufo_shape, data = ufo_sightings_modified5, fill = ~ufo_shape) %>%
+  gf_labs(title = "UFO Shapes")%>%+
+coord_flip()
+```
+
+[**Graphs**]{.underline}
+
+**What months have the highest UFO Sightings?**
+
+```{r}
+#What months have the highest UFO Sightings?
+gf_bar(~month, data = ufo_sightings_modified5) %>%
+  gf_labs(
+    title = "Count of UFO sightings each month",
+    x = "Month",
+    y = "Number of uFO Sightings"
+  )
+```
+
+**What did I find surprsing?**
+
+Summer months in the North American continent report the highest UFO sightings, and the sightings dip as the temperature gets colder.
+
+**What are the yearly trends of UFO sightings, and what are the top 5 UFO shapes sighted each year?**
+
+```{r}
+#What are the yearly trends of UFO sightings and what are the top 5 UFO shapes sighted each year?
+ufo_sightings_modified5 %>%
+  group_by(year, ufo_shape) %>%
+  summarize(count = n()) %>%
+  slice_max(count, n = 5) %>%
+  gf_col(count ~ year, fill = ~ufo_shape, position = "stack")%>%
+  gf_labs(
+    title = "Top 5 UFO Shape Sighted Each Year",
+    subtitle = "Subtitle",,
+    x = "Year",
+    y = "No. of UFO Sightings"
+  )
+```
+
+**What did I find surprising?**
+
+-   There is a sudden increase in UFO sightings from 2012. It could possibly be because of the worldwide panic around the supposed world-ending event predicted to happen in 2012.
+
+-   There is a sudden increase in fireball shaped UFOs in 2010 after suffering a dip in the 2002-09 period.
+
+**What are the top 5 UFO shapes sighted each month?**
+
+```{r}
+#What are the top 5 UFO shapes sighted each month?
+ufo_sightings_modified5 %>%
+  group_by(month, ufo_shape) %>%
+  summarize(count = n()) %>%
+  slice_max(count, n = 5) %>%
+  gf_col(count ~ month, fill = ~ufo_shape, position = "fill")%>%
+  gf_labs(
+    title = "Proportion of Top 5 UFO Shape Sighted Each Month",
+    subtitle = "Subtitle",,
+    x = "Month",
+    y = "No. of UFO Sightings"
+  ) %>%
+  gf_annotate(
+    "rect",
+    xmin = 5.55,
+    xmax = 6.42,
+    ymin = 0.83,
+    ymax = 0.66,
+    alpha = 0.025,
+    col = "black"
+  )
+```
+
+**What did I find surprising?**
+
+-   The number of disk-shaped UFOs (annotated in the brown rectangle with black strokes) spotted is proportionally higher in the month of June. Do we have a common visitor that follows an yearly timetable?
+
+**Summary**
+
+-   The value for encounter lengths vary by a lot, which made it often difficult to plot meaningful graphs, since we were not taught how to plot using logs. The mean and median encounter length varies by a lot due to the same reason. Encounter length here is an Extremistan data type.
+
+-   "Light" is the most spotted UFO type.
+
+-   July month reports the highest UFO sightings, followed by August and June. In general, UFO sightings peak during the summer season in the North American continent and dips during the winter.
+
+-   There are sudden increases in UFO sightings after 1996 and 2011. There could be popular events that could match up to this finding, like the 2012 panic over world ending.
+
+-   Disk-shaped UFOs are more disproportionately spotted during June, which is interesting.
